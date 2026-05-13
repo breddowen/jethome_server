@@ -1,5 +1,5 @@
-# ./.github/workflows/build.yml
-name: Build Docker Images
+# ./.github/workflows/deploy.yml
+name: Build and Deploy to JetHub
 
 on:
   push:
@@ -42,7 +42,6 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,prefix={{branch}}-
-            type=ref,event=branch
 
       - name: Build and push Backend
         uses: docker/build-push-action@v5
@@ -63,7 +62,6 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,prefix={{branch}}-
-            type=ref,event=branch
 
       - name: Build and push Frontend
         uses: docker/build-push-action@v5
@@ -76,23 +74,88 @@ jobs:
           cache-from: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache,mode=max
 
-      - name: Build Summary
+  deploy:
+    name: Deploy to JetHub
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.JETHUB_HOST }}
+          username: ${{ secrets.JETHUB_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -e
+            
+            echo "🚀 Starting deployment..."
+            
+            # Создание директории
+            mkdir -p /opt/jethome_server/deploy
+            cd /opt/jethome_server/deploy
+            
+            # Логин в GitHub Container Registry
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u breddowen --password-stdin
+            
+            # Остановка старых контейнеров
+            echo "⏹️  Stopping old containers..."
+            docker-compose down || true
+            
+            # Удаление старых образов
+            echo "🗑️  Removing old images..."
+            docker rmi ghcr.io/breddowen/jethome-backend:latest || true
+            docker rmi ghcr.io/breddowen/jethome-frontend:latest || true
+            
+            # Загрузка новых образов
+            echo "📥 Pulling new images..."
+            docker pull ghcr.io/breddowen/jethome-backend:latest
+            docker pull ghcr.io/breddowen/jethome-frontend:latest
+            
+            # Запуск новых контейнеров
+            echo "▶️  Starting new containers..."
+            docker-compose up -d
+            
+            # Проверка статуса
+            echo "✅ Checking status..."
+            sleep 10
+            docker-compose ps
+            
+            # Очистка
+            echo "🧹 Cleaning up..."
+            docker image prune -f
+            
+            echo "🎉 Deployment completed!"
+
+      - name: Copy deployment files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.JETHUB_HOST }}
+          username: ${{ secrets.JETHUB_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "deploy/docker-compose.yml,deploy/nginx.conf"
+          target: "/opt/jethome_server/"
+          strip_components: 0
+
+      - name: Verify deployment
         run: |
-          echo "### ✅ Docker Images Built Successfully!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Backend Image:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.BACKEND_IMAGE }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Frontend Image:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.FRONTEND_IMAGE }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Deploy on JetHub:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "ssh root@YOUR_JETHUB_IP" >> $GITHUB_STEP_SUMMARY
-          echo "cd /opt/jethome_server/deploy" >> $GITHUB_STEP_SUMMARY
-          echo "./update.sh" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "🔍 Verifying deployment..."
+          sleep 10
+          
+          # Проверка backend
+          if curl -f --connect-timeout 10 http://${{ secrets.JETHUB_HOST }}:8000/health; then
+            echo "✅ Backend is healthy"
+          else
+            echo "⚠️ Backend health check failed (might need more time)"
+          fi
+          
+          # Проверка frontend
+          if curl -f --connect-timeout 10 http://${{ secrets.JETHUB_HOST }}; then
+            echo "✅ Frontend is accessible"
+          else
+            echo "⚠️ Frontend is not accessible (might need more time)"
+          fi
