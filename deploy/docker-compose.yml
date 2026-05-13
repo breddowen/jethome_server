@@ -40,6 +40,8 @@ services:
   nginx:
     image: nginx:alpine
     container_name: jethub-nginx
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Позволяет Nginx видеть хост
     restart: unless-stopped
     ports:
       - "80:80"
