@@ -1,3 +1,17 @@
+git add .
+git commit -m "Fix:"
+git push
+
+
+git clone https://github.com/breddowen/jethome_server.git
+
+
+
+
+
+
+
+
 # jethome_server# 🚀 Обновленная структура с GitHub Container Registry
 
 ## 📝 Содержание
