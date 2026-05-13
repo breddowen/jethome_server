@@ -9,9 +9,6 @@ git clone https://github.com/breddowen/jethome_server.git
 
 
 
-
-
-
 # jethome_server# 🚀 Обновленная структура с GitHub Container Registry
 
 ## 📝 Содержание
