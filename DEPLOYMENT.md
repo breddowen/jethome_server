@@ -207,4 +207,74 @@ GitHub Actions автоматически задеплоит на JetHub!
 
 ---
 
-Все готово! Хотите, чтобы я добавил что-то еще или доработал какую-то часть?
+КАК ЗАЛИТЬ НА GITHUB
+
+Чтобы загрузить ваш проект на GitHub, выполните следующие шаги в терминале на вашем ПК.
+## Шаг 1: Инициализация и подготовка
+
+   1. Откройте терминал и перейдите в корневую директорию проекта:
+   
+   cd jethome_server
+   
+   2. Создайте файл .gitignore в корневой директории (jethome_server/), чтобы не загружать в репозиторий лишние файлы (базу данных, секреты, логи и зависимости):
+   
+   touch .gitignore
+   
+   3. Откройте .gitignore в текстовом редакторе и добавьте туда следующие строки:
+   
+   # Python
+   __pycache__/
+   *.py[cod]
+   *$py.class
+   .venv/
+   venv/
+   
+   # Databases
+   backend/test_database.db
+   
+   # Node / Nuxt
+   node_modules/
+   .nuxt/
+   dist/
+   .output/
+   
+   # Environment variables
+   .env
+   backend/.env
+   frontend/.env
+   
+   
+## Шаг 2: Привязка и отправка кода
+
+   1. Инициализируйте локальный Git-репозиторий:
+   
+   git init
+   
+   2. Добавьте все файлы проекта в индекс (кроме тех, что указаны в .gitignore):
+   
+   git add .
+   
+   3. Сделайте первый коммит:
+   
+   git commit -m "Initial commit: backend, frontend, deploy and workflow"
+   
+   4. Установите имя главной ветки main:
+   
+   git branch -M main
+   
+   5. Привяжите ваш удаленный репозиторий GitHub к локальному:
+   
+   git remote add origin https://github.com/breddowen/jethome_server.git
+   
+   6. Отправьте код на GitHub (если у вас настроен GitHub CLI или SSH, команда выполнится сразу; если нет — потребуется ввести логин и Personal Access Token вместо пароля):
+   
+   git push -u origin main
+   
+   
+Если вы хотите автоматизировать деплой через созданный файл deploy.yml, сообщите:
+
+* Какую платформу/сервер (VPS, AWS, Heroku) вы планируете использовать для деплоя?
+* Настроены ли уже секреты репозитория (Repository Secrets) в настройках вашего GitHub?
+
+Я помогу правильно донастроить GitHub Actions для вашей структуры.
+
