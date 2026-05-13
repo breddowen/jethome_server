@@ -1,0 +1,55 @@
+# ./deploy/docker-compose.yml
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: jethub-backend
+    restart: unless-stopped
+    volumes:
+      - ../backend/test_database.db:/app/data/test_database.db
+      # Для доступа к systemd и iptables (только если запускается на самом JetHub)
+      - /var/run/dbus:/var/run/dbus:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    network_mode: host
+    privileged: true  # Нужно для iptables и systemctl
+    environment:
+      - DATABASE_URL=sqlite:////app/data/test_database.db
+      - CORS_ORIGINS=["http://localhost:3000","http://10.42.0.1:3000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: jethub-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NUXT_PUBLIC_API_BASE=http://localhost:8000
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: jethub-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend

@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Databases
+backend/test_database.db
+
+# Node / Nuxt
+node_modules/
+.nuxt/
+dist/
+.output/
