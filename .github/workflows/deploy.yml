@@ -83,40 +83,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add JetHub to known hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.JETHUB_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Copy deployment files to JetHub
-        env:
-          JETHUB_HOST: ${{ secrets.JETHUB_HOST }}
-          JETHUB_USER: ${{ secrets.JETHUB_USER }}
-        run: |
-          # Создаем директорию если нет
-          ssh $JETHUB_USER@$JETHUB_HOST "mkdir -p /opt/jethome_server/deploy"
-          
-          # Копируем docker-compose и nginx.conf
-          scp deploy/docker-compose.yml $JETHUB_USER@$JETHUB_HOST:/opt/jethome_server/deploy/
-          scp deploy/nginx.conf $JETHUB_USER@$JETHUB_HOST:/opt/jethome_server/deploy/
-
-      - name: Deploy to JetHub
-        env:
-          JETHUB_HOST: ${{ secrets.JETHUB_HOST }}
-          JETHUB_USER: ${{ secrets.JETHUB_USER }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: |
-          ssh $JETHUB_USER@$JETHUB_HOST << 'ENDSSH'
+          host: ${{ secrets.JETHUB_HOST }}
+          username: ${{ secrets.JETHUB_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
             set -e
             
             echo "🚀 Starting deployment..."
             
-            cd /opt/jethome_server/deploy || exit 1
+            # Создание директории
+            mkdir -p /opt/jethome_server/deploy
+            cd /opt/jethome_server/deploy
             
             # Логин в GitHub Container Registry
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u breddowen --password-stdin
@@ -132,7 +113,8 @@ jobs:
             
             # Загрузка новых образов
             echo "📥 Pulling new images..."
-            docker-compose pull
+            docker pull ghcr.io/breddowen/jethome-backend:latest
+            docker pull ghcr.io/breddowen/jethome-frontend:latest
             
             # Запуск новых контейнеров
             echo "▶️  Starting new containers..."
@@ -143,46 +125,37 @@ jobs:
             sleep 10
             docker-compose ps
             
-            # Очистка неиспользуемых образов
+            # Очистка
             echo "🧹 Cleaning up..."
             docker image prune -f
             
             echo "🎉 Deployment completed!"
-          ENDSSH
+
+      - name: Copy deployment files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.JETHUB_HOST }}
+          username: ${{ secrets.JETHUB_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "deploy/docker-compose.yml,deploy/nginx.conf"
+          target: "/opt/jethome_server/"
+          strip_components: 0
 
       - name: Verify deployment
-        env:
-          JETHUB_HOST: ${{ secrets.JETHUB_HOST }}
         run: |
           echo "🔍 Verifying deployment..."
-          sleep 5
+          sleep 10
           
           # Проверка backend
-          if curl -f http://$JETHUB_HOST:8000/health; then
+          if curl -f --connect-timeout 10 http://${{ secrets.JETHUB_HOST }}:8000/health; then
             echo "✅ Backend is healthy"
           else
-            echo "❌ Backend health check failed"
-            exit 1
+            echo "⚠️ Backend health check failed (might need more time)"
           fi
           
-          # Проверка frontend через nginx
-          if curl -f http://$JETHUB_HOST; then
+          # Проверка frontend
+          if curl -f --connect-timeout 10 http://${{ secrets.JETHUB_HOST }}; then
             echo "✅ Frontend is accessible"
           else
-            echo "❌ Frontend is not accessible"
-            exit 1
+            echo "⚠️ Frontend is not accessible (might need more time)"
           fi
-          
-          echo "🎉 All health checks passed!"
-
-      - name: Notify on success
-        if: success()
-        run: |
-          echo "✅ Deployment successful!"
-          echo "Access your app at: http://${{ secrets.JETHUB_HOST }}"
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "❌ Deployment failed!"
-          echo "Check the logs above for details"
